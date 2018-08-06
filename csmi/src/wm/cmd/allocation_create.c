@@ -156,10 +156,189 @@ int main(int argc, char *argv[])
                 allocation->shared = CSM_TRUE;
                 break;
             case 'n':
+            {
                 csm_optarg_test( "-n, --node_range", optarg, USAGE );
-                csm_parse_csv( optarg, allocation->compute_nodes, allocation->num_nodes, char*,
-                            csm_str_to_char, NULL, "-n, --node_range", USAGE );
+                printf("optarg: %s\n", optarg);
+                puts("Looking for noderange.");
+
+                char* bracket_pointer = NULL;
+                int reserved_chars = 0;
+                printf("bracket_pointer: %p\n", bracket_pointer);
+                bracket_pointer = strchr(optarg,'[');
+                printf("bracket_pointer: %p\n", bracket_pointer);
+
+                if(bracket_pointer == NULL)
+                {
+                    //No range was found
+                    puts("noderange not found. default behavior.");
+                   csm_parse_csv( optarg, allocation->compute_nodes, allocation->num_nodes, char*,
+                            csm_str_to_char, NULL, "-n, --node_range", USAGE ); 
+                }else{
+                    //range was found
+                    puts("noderange found. noderange behavior activated.");
+
+                    //variables
+                    int range_digits = 0;
+                    int range_counter = 0;
+                    char range_counter_buffer[512];
+                    char* base_node_name = NULL;
+
+
+
+
+
+                    printf ("'[' found at %li\n",bracket_pointer-optarg+1);
+                    //record the number of characters in the string before the '['
+                    printf ("reserved_chars: %i\n",reserved_chars);
+                    reserved_chars = bracket_pointer-optarg;
+                    printf ("reserved_chars: %i\n",reserved_chars);
+
+                    //find the dash
+                    char* dash_pointer = NULL;
+                    printf("dash_pointer: %p\n", dash_pointer);
+                    dash_pointer = strchr(optarg,'-');
+                    printf("dash_pointer: %p\n", dash_pointer);
+
+                    if(dash_pointer == NULL)
+                    {
+                        //bad
+                    }else
+                    {
+                        //good - found more format
+                        printf ("'-' found at %li\n", dash_pointer-optarg+1);
+
+                        //calculate the range digits
+                        printf("range_digits: %i\n", range_digits);
+                        range_digits = (dash_pointer-optarg+1) - (bracket_pointer-optarg+1) -1;
+                        printf("range_digits: %i\n", range_digits);
+                    }
+
+                    printf("char at '[': %c\n", *bracket_pointer);
+
+                    char* first_node_digit = NULL;
+
+                    first_node_digit = (char*)calloc(range_digits+1,sizeof(char));
+                    //memcpy the stuff out of optarg
+                    memcpy(first_node_digit, bracket_pointer+1, range_digits);
+
+                    printf("first_node_digit: %s\n", first_node_digit);
+
+
+                    //grab the first node digit. save to int. use this later to find total number of nodes
+
+                    int first_node_digit_int = 0;
+                    printf("first_node_digit_int: %i\n", first_node_digit_int);
+                    first_node_digit_int = atoi(first_node_digit);
+                    printf("first_node_digit_int: %i\n", first_node_digit_int);
+
+                    //find end of range
+                    char* last_node_digit = NULL;
+
+                    last_node_digit = (char*)calloc(range_digits+1,sizeof(char));
+                    //memcpy the stuff out of optarg
+                    memcpy(last_node_digit, dash_pointer+1, range_digits);
+
+                    printf("last_node_digit: %s\n", last_node_digit);
+
+                    //grab the last node digit. save to int. use this later to find total number of nodes
+
+                    int last_node_digit_int = 0;
+                    printf("last_node_digit_int: %i\n", last_node_digit_int);
+                    last_node_digit_int = atoi(last_node_digit);
+                    printf("last_node_digit_int: %i\n", last_node_digit_int);
+
+                    int totalNumberOfNodesInNodeRange = 0;
+                    printf("totalNumberOfNodesInNodeRange: %i\n", totalNumberOfNodesInNodeRange);
+                    totalNumberOfNodesInNodeRange = last_node_digit_int - first_node_digit_int + 1;
+                    printf("totalNumberOfNodesInNodeRange: %i\n", totalNumberOfNodesInNodeRange);
+
+                    //now that you know the total number of nodes in the range
+                    //set the num nodes
+                    allocation->num_nodes = totalNumberOfNodesInNodeRange;
+                    //allocate the array
+                    //so we can start filling up the node names
+                    allocation->compute_nodes = (char**)calloc(allocation->num_nodes,sizeof(char*));
+
+                    //grab the base node name for the range
+                    base_node_name = (char*)calloc(reserved_chars+1,sizeof(char));
+
+                    printf("base_node_name: %s\n", base_node_name);
+                    memcpy(base_node_name, optarg, reserved_chars);
+                    printf("base_node_name: %s\n", base_node_name);
+
+                    //fill up all the node names in the range
+
+                    //set up the first range counter
+                    printf("first range_counter: %i\n", range_counter);
+                    range_counter = first_node_digit_int;
+                    printf("first range_counter: %i\n", range_counter);
+
+                    char* full_node_name = NULL;
+
+                    int i = 0;
+                    for(i = 0; i < allocation->num_nodes; i++)
+                    {
+
+
+                        //reserve a node name with enough space for characters
+                        // the reserved chars from above, plus the range digits, plus one for null terminated char
+                        // example: c123f01p[01-10]
+                        // reserved chars: c123f01p = 8
+                        // range_digits: 01 = 2
+                        // total space for malloc = 11
+                        full_node_name = (char*)calloc(reserved_chars+range_digits+1,sizeof(char));
+
+                        printf("full_node_name: %s\n", full_node_name);
+
+                        //memcpy the base node name
+                        memcpy(full_node_name, base_node_name, reserved_chars);
+
+                        printf("full_node_name: %s\n", full_node_name);
+
+
+                        //temp var for help
+                        printf("range_counter: %i\n", range_counter);
+                        sprintf(range_counter_buffer, "%0*d", range_digits, range_counter);
+                        printf("range_counter_buffer: %s\n", range_counter_buffer);
+
+                        //memcpy the node digits
+                        memcpy(full_node_name + reserved_chars, range_counter_buffer, range_digits);
+
+
+                         printf("full_node_name: %s\n", full_node_name);
+
+
+
+
+                        allocation->compute_nodes[i] = strdup(full_node_name);
+
+                        range_counter++;
+                        free(full_node_name);
+                    }
+
+                    printf("allocation->num_nodes: %i\n", allocation->num_nodes);
+                    printf("all the nodes in allocation->compute_nodes:\n");
+
+                    for(i = 0; i < allocation->num_nodes; i++)
+                    {
+                        printf("allocation->compute_nodes[%i]: %s\n", i, allocation->compute_nodes[i]);
+                    }
+                    
+                    
+
+
+
+                    
+
+                    
+
+
+                    
+                    
+                }
+
                 break;
+            }
             case 's':
                 csm_optarg_test( "-s, --state", optarg, USAGE )
                 test_value = csm_get_enum_from_string(csmi_state_t, optarg);
