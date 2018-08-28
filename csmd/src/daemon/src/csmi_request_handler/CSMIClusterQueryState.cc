@@ -26,13 +26,13 @@
 // Use this to make changing struct names easier.
 #define API_PARAMETER_INPUT_TYPE csm_cluster_query_state_input_t
 #define API_PARAMETER_OUTPUT_TYPE csm_cluster_query_state_output_t
-#define DB_RECORD_STRUCT csmi_cluster_query_state_record_t 
+#define DB_RECORD_STRUCT csmi_cluster_query_state_record_t
 
 bool CSMIClusterQueryState::CreatePayload(
         const std::string& stringBuffer,
         const uint32_t bufferLength,
         csm::db::DBReqContent **dbPayload,
-        csm::daemon::EventContextHandlerState_sptr ctx ) 
+        csm::daemon::EventContextHandlerState_sptr ctx )
 {
     LOG(csmapi, trace) << STATE_NAME ":CreatePayload: Enter";
 
@@ -43,24 +43,24 @@ bool CSMIClusterQueryState::CreatePayload(
 	if( csm_deserialize_struct(API_PARAMETER_INPUT_TYPE, &input, stringBuffer.c_str(), bufferLength) != 0)
     {
 		LOG(csmapi,error) << STATE_NAME ":CreatePayload: csm_deserialize_struct failed...";
-		LOG(csmapi,error) << "  bufferLength = " << bufferLength << " stringBuffer = " 
+		LOG(csmapi,error) << "  bufferLength = " << bufferLength << " stringBuffer = "
             << stringBuffer.c_str();
 		ctx->SetErrorCode(CSMERR_MSG_UNPACK_ERROR);
 		//append to the err msg as to preserve other previous messages.
 		ctx->AppendErrorMessage("CreatePayload: csm_deserialize_struct failed...");
 		return false;
 	}
-	
+
 	// =====================================================================
 	std::string stmtParams = "";
 	int SQLparameterCount = 0;
-	
+
 	//num allocs is special. don't add it here. need to use the "HAVING" SQL key word
 	//add_param_sql(stmtParams, input->num_allocs >= 0, ++SQLparameterCount, "num_allocs = $","::int AND ")
 	add_param_sql(stmtParams, input->state && input->state < csm_enum_max(csmi_node_state_t), ++SQLparameterCount, "n.state = $", "::compute_node_states  AND ")
 	add_param_sql(stmtParams, input->type && input->type < csm_enum_max(csmi_node_type_t), ++SQLparameterCount, "n.type = $", "::text AND ")
-		
-		
+
+
 	// TODO should this fail if the parameter count is zero?
     // Replace the last 4 characters if any parameters were found.
     if ( SQLparameterCount > 0)
@@ -69,10 +69,10 @@ bool CSMIClusterQueryState::CreatePayload(
         for( int i = len - 3; i < len; ++i)
             stmtParams[i] = ' ';
     }
-	
+
 	//ToDo: turn this into a DB function.
 	/*Open "std::string stmt"*/
-	std::string stmt = 
+	std::string stmt =
 		"SELECT "
 			"n.node_name, n.collection_time, n.update_time, n.state, n.type, COUNT(an.allocation_id) AS num_allocs, array_agg(an.allocation_id) AS allocs, array_agg(an.state) AS states, array_agg(an.shared) AS shared "
 		"FROM csm_node AS n "
@@ -116,6 +116,7 @@ bool CSMIClusterQueryState::CreatePayload(
 				break;
 			case 'h':
 				stmt.append("num_allocs DESC NULLS LAST ");
+        break;
 			default:
 				stmt.append("node_name ASC NULLS LAST ");
 		}
@@ -124,20 +125,20 @@ bool CSMIClusterQueryState::CreatePayload(
 		add_param_sql( stmt, input->offset > 0, ++SQLparameterCount,
             "OFFSET $", "::int ")
 	/*Close "std::string stmt"*/
-	
+
 	// Build the parameterized list.
-	csm::db::DBReqContent *dbReq = new csm::db::DBReqContent(stmt, SQLparameterCount); 
+	csm::db::DBReqContent *dbReq = new csm::db::DBReqContent(stmt, SQLparameterCount);
 	if(input->state && input->state < csm_enum_max(csmi_node_state_t)) dbReq->AddTextParam  (csm_get_string_from_enum(csmi_node_state_t, input->state));
 	if(input->type && input->type < csm_enum_max(csmi_node_type_t)) dbReq->AddTextParam  (csm_get_string_from_enum(csmi_node_type_t, input->type));
 	if(input->num_allocs >= 0 ) dbReq->AddNumericParam<int>(input->num_allocs);
 	if(input->limit      > 0  ) dbReq->AddNumericParam<int>(input->limit);
 	if(input->offset     > 0  ) dbReq->AddNumericParam<int>(input->offset);
-	
+
 	*dbPayload = dbReq;
 
 	//release memory using CSM API function
 	csm_free_struct_ptr(API_PARAMETER_INPUT_TYPE, input);
-	
+
 	LOG(csmapi,trace) << STATE_NAME ":CreatePayload: Parameterized SQL: " << stmt;
 
     LOG(csmapi, trace) << STATE_NAME ":CreatePayload: Exit";
@@ -149,20 +150,20 @@ bool CSMIClusterQueryState::CreateByteArray(
         const std::vector<csm::db::DBTuple *>&tuples,
         char **stringBuffer,
 		uint32_t &bufferLength,
-        csm::daemon::EventContextHandlerState_sptr ctx ) 
+        csm::daemon::EventContextHandlerState_sptr ctx )
 {
     LOG( csmapi, trace ) << STATE_NAME ":CreateByteArray: Enter";
 
 	*stringBuffer = NULL;
     bufferLength = 0;
-	
+
 	/*Helper Variables*/
 	uint32_t numberOfRecords = tuples.size();
 
 	if(numberOfRecords > 0)
     {
 		/*Our SQL query found at least one matching record.*/
-		
+
         /* Prepare the data to be returned. */
 		API_PARAMETER_OUTPUT_TYPE* output = NULL;
 		csm_init_struct_ptr(API_PARAMETER_OUTPUT_TYPE, output);
@@ -170,19 +171,19 @@ bool CSMIClusterQueryState::CreateByteArray(
 		output->results_count = numberOfRecords;
 		/* Create space for each result. */
 		output->results = (DB_RECORD_STRUCT**)calloc(output->results_count, sizeof(DB_RECORD_STRUCT*));
-		
+
 		/* Build the individual records for packing. */
 		for (uint32_t i = 0; i < numberOfRecords; i++){
 			CreateOutputStruct(tuples[i], &(output->results[i]));
 		}
-		
+
 		// Pack the allocation up.
 		csm_serialize_struct(API_PARAMETER_OUTPUT_TYPE, output, stringBuffer, &bufferLength);
-		
+
 		// Free struct we made.
 		csm_free_struct_ptr(API_PARAMETER_OUTPUT_TYPE, output);
-    }    
-    
+    }
+
     LOG(csmapi, trace) << STATE_NAME ":CreateByteArray: Exit";
 
     return true;
@@ -199,13 +200,13 @@ void CSMIClusterQueryState::CreateOutputStruct(
             *output = nullptr;
             return;
         }
-		
+
 		/*Helper Variables*/
 		//char* pEnd; // comparison pointer for data conversion check.
 		int d = 0; //keep place in data counter
-		
+
 		csm_prep_csv_to_struct();
-        
+
 		/*Set up data to call API*/
         DB_RECORD_STRUCT *o = nullptr;
 		/* CSM API initialize and malloc function*/
@@ -229,16 +230,16 @@ void CSMIClusterQueryState::CreateOutputStruct(
 				o->states[j] = NULL;
 				o->shared[j] = NULL;
 		    }
-		    
+
             csm_parse_psql_array_to_struct( fields->data[d], o->allocs, o->num_allocs, CSM_NO_MEMBER, -1, csm_to_int64);      d++;
             csm_parse_psql_array_to_struct( fields->data[d], o->states, o->num_allocs, CSM_NO_MEMBER, strdup("N/A"), strdup); d++;
             csm_parse_psql_array_to_struct( fields->data[d], o->shared, o->num_allocs, CSM_NO_MEMBER, strdup("N/A"), strdup); d++;
 		}
-		
-		
-       
-	    
-		
+
+
+
+
+
 
         *output = o;
 
